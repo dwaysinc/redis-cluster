@@ -1,0 +1,22 @@
+{
+  "name": "dwaysinc/redis-cluster",
+  "keywords": [
+    "amp",
+    "amphp",
+    "async",
+    "client",
+    "redis",
+    "redis-cluster"
+  ],
+  "license": "MIT",
+  "require": {
+    "php": ">=8.1",
+    "amphp/redis": "^1.0.7",
+    "amphp/amp": "^2.6.2"
+  },
+  "autoload": {
+    "psr-4": {
+      "DwaysInc\\RedisCluster\\": "src"
+    }
+  }
+}
