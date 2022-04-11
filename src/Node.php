@@ -10,15 +10,14 @@ use RuntimeException;
 final class Node
 {
     private Redis $redis;
+    private NodeInfo $nodeInfo;
+
+    /** @var Node[] */
+    private array $slaveNodes = [];
 
     public function __construct(Redis $redis)
     {
         $this->redis = $redis;
-    }
-
-    public function clusterNodes(): Promise
-    {
-        return $this->redis->query('CLUSTER', 'NODES');
     }
 
     public function __call(string $name, array $arguments)
@@ -28,5 +27,42 @@ final class Node
         }
 
         return new Failure(new RuntimeException(sprintf('Unknown method called: %s', $name)));
+    }
+
+    public function clusterNodes(): Promise
+    {
+        return $this->redis->query('CLUSTER', 'NODES');
+    }
+
+    /**
+     * @return NodeInfo
+     */
+    public function getNodeInfo(): NodeInfo
+    {
+        return $this->nodeInfo;
+    }
+
+    /**
+     * @param NodeInfo $nodeInfo
+     */
+    public function setNodeInfo(NodeInfo $nodeInfo): void
+    {
+        $this->nodeInfo = $nodeInfo;
+    }
+
+    /**
+     * @return Node[]
+     */
+    public function getSlaveNodes(): array
+    {
+        return $this->slaveNodes;
+    }
+
+    /**
+     * @param Node[] $slaveNodes
+     */
+    public function setSlaveNodes(array $slaveNodes): void
+    {
+        $this->slaveNodes = $slaveNodes;
     }
 }

@@ -2,7 +2,7 @@
 
 namespace DwaysInc\RedisCluster;
 
-class ClusterNode
+class NodeInfo
 {
     /**
      * The node ID, a 40 characters random string generated when a node is created and never changed
@@ -79,7 +79,7 @@ class ClusterNode
     {
         $clusterNodeInfo = str_getcsv($clusterNodeInfo, ' ');
 
-        $clusterNode = new ClusterNode();
+        $clusterNode = new NodeInfo();
         $clusterNode->setId($clusterNodeInfo[0]);
         $clusterNode->setAddress($clusterNodeInfo[1]);
 
@@ -245,5 +245,38 @@ class ClusterNode
     public function setSlot(array $slot): void
     {
         $this->slot = $slot;
+    }
+
+    public function getIsSelf(): bool
+    {
+        foreach ($this->getFlags() as $flag) {
+            if ($flag === NodeInfoFlagEnum::myself->name) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function getIsMaster(): bool
+    {
+        foreach ($this->getFlags() as $flag) {
+            if ($flag === NodeInfoFlagEnum::master->name) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function getIsSlave(): bool
+    {
+        foreach ($this->getFlags() as $flag) {
+            if ($flag === NodeInfoFlagEnum::slave->name) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

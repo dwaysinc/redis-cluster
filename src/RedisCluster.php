@@ -41,8 +41,13 @@ final class RedisCluster implements RedisClusterInterface
             foreach ($this->nodes as $node) {
                 $clusterNodes = ClusterNodesParser::parse(yield $node->clusterNodes());
 
-                var_dump($clusterNodes);
-                die;
+                foreach ($clusterNodes as $clusterNode) {
+                    if ($clusterNode->getIsSelf()) {
+                        $node->setNodeInfo($clusterNode);
+
+                        break;
+                    }
+                }
             }
         });
     }
@@ -54,9 +59,28 @@ final class RedisCluster implements RedisClusterInterface
         }
 
         return $this->connect = call(function () {
-            $clusterNodes = yield $this->clusterNodes();
-
-            var_dump($clusterNodes);
+            yield $this->clusterNodes();
+            $this->initNodes();
         });
+    }
+
+    private function initNodes()
+    {
+        $masterNodes = [];
+        $slaveNodes = [];
+
+        foreach ($this->nodes as $node) {
+            if ($node->getNodeInfo()->getIsMaster()) {
+                $masterNodes[$node->getNodeInfo()->getId()] = $node;
+            } elseif ($node->getNodeInfo()->getIsSlave()) {
+                $slaveNodes[$node->getNodeInfo()->getId()] = $node;
+            }
+        }
+
+        foreach ($slaveNodes as $node) {
+            if (isset($masterNodes[$node->getNodeInfo()->getMaster()])) {
+                $node->setSlaveNodes(array_merge($node->getSlaveNodes(), [$node->getNodeInfo()->getId() => $node]));
+            }
+        }
     }
 }

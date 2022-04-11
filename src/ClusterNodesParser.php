@@ -6,7 +6,7 @@ class ClusterNodesParser
 {
     /**
      * @param string $clusterNodesResponse
-     * @return ClusterNode[]
+     * @return NodeInfo[]
      */
     public static function parse(string $clusterNodesResponse): array
     {
@@ -18,10 +18,8 @@ class ClusterNodesParser
                 continue;
             }
 
-            $clusterNodes[] = ClusterNode::fromString($clusterNodeInfo);
+            $clusterNodes[] = NodeInfo::fromString($clusterNodeInfo);
         }
-
-        var_dump($clusterNodes);die;
 
         return $clusterNodes;
     }

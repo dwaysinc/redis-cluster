@@ -9,11 +9,11 @@ use Amp\Redis\RemoteExecutor;
 Amp\Loop::run(static function () {
     $redisCluster = new DwaysInc\RedisCluster\RedisCluster(...[
         new Redis(new RemoteExecutor(Config::fromUri('tcp://redis-node-0:6379?password=bitnami',))),
-        new Redis(new RemoteExecutor(Config::fromUri('tcp://redis-node-0:6380?password=bitnami',))),
-        new Redis(new RemoteExecutor(Config::fromUri('tcp://redis-node-0:6381?password=bitnami',))),
-        new Redis(new RemoteExecutor(Config::fromUri('tcp://redis-node-0:6382?password=bitnami',))),
-        new Redis(new RemoteExecutor(Config::fromUri('tcp://redis-node-0:6383?password=bitnami',))),
-        new Redis(new RemoteExecutor(Config::fromUri('tcp://redis-node-0:6384?password=bitnami',))),
+        new Redis(new RemoteExecutor(Config::fromUri('tcp://redis-node-1:6379?password=bitnami',))),
+        new Redis(new RemoteExecutor(Config::fromUri('tcp://redis-node-2:6379?password=bitnami',))),
+        new Redis(new RemoteExecutor(Config::fromUri('tcp://redis-node-3:6379?password=bitnami',))),
+        new Redis(new RemoteExecutor(Config::fromUri('tcp://redis-node-4:6379?password=bitnami',))),
+        new Redis(new RemoteExecutor(Config::fromUri('tcp://redis-node-5:6379?password=bitnami',))),
     ]);
 
     yield $redisCluster->set('a', 12);
