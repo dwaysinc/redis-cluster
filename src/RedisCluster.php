@@ -82,5 +82,8 @@ final class RedisCluster implements RedisClusterInterface
                 $node->setSlaveNodes(array_merge($node->getSlaveNodes(), [$node->getNodeInfo()->getId() => $node]));
             }
         }
+
+        $this->activeMasterNodes = $masterNodes;
+        $this->activeSlaveNodes = $slaveNodes;
     }
 }
