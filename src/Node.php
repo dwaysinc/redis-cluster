@@ -10,6 +10,7 @@ use RuntimeException;
 /**
  * @see Redis
  * @method set($key, $value, $options)
+ * @method get($key)
  */
 final class Node
 {

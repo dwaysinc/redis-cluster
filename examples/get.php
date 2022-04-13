@@ -28,5 +28,11 @@ Amp\Loop::run(static function () {
 
     $redisCluster->setLogger($logger);
 
-    yield $redisCluster->set('12345678', 12);
+    $key = 12345678;
+
+    yield $redisCluster->set($key, 12);
+
+    $value = yield $redisCluster->get(12345678);
+
+    $logger->info(sprintf('Got value by key %s - %s', $key, $value));
 });
