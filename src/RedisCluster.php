@@ -2,10 +2,10 @@
 
 namespace DwaysInc\RedisCluster;
 
-use Amp\Failure;
 use Amp\Promise;
 use Amp\Redis\Redis;
 use Amp\Redis\SetOptions;
+use Monolog\Logger;
 use RuntimeException;
 use Throwable;
 use function Amp\call;
@@ -20,6 +20,7 @@ final class RedisCluster implements RedisClusterInterface
     private array $activeSlaveNodes;
 
     private Promise $connect;
+    private ?Logger $logger = null;
 
     /**
      * @param Redis ...$redisList
@@ -39,18 +40,23 @@ final class RedisCluster implements RedisClusterInterface
             // todo: refactor
             $nodes = $this->getNodesByKey($key, $findHashSlotStrategyEnum);
 
-            foreach ($nodes as $node) {
-                try {
-                    return yield $node->set($key, $value, $options);
-                } catch (Throwable $e) {}
-            }
-
             if (empty($nodes)) {
-                $e = new RuntimeException('Nodes not found');
+                throw new RuntimeException('Nodes not found');
             }
 
-            // todo: refactor
-            return new Failure($e);
+            $this->getLogger()->debug(sprintf('Found nodes to execute: %s', print_r(array_keys($nodes), true)));
+
+            foreach ($nodes as $id => $node) {
+                try {
+                    $this->getLogger()?->debug(sprintf('Trying to execute set on node %s', $id));
+
+                    return yield $node->set($key, $value, $options);
+                } catch (Throwable $e) {
+                    $this->getLogger()?->error($e->getMessage() . PHP_EOL . $e->getTraceAsString());
+                }
+            }
+
+            throw new RuntimeException('Cannot execute set command');
         });
     }
 
@@ -117,8 +123,21 @@ final class RedisCluster implements RedisClusterInterface
      */
     private function getNodesByKey(string $key, FindHashSlotStrategyEnum $findHashSlotStrategyEnum): array
     {
-        $hashSlot = Crc16::calculate($key) & 0x3FFF;
+        $hashSlot = Crc16::calculate($key) % 16384;
 
+        $this->getLogger()?->debug(sprintf('Hash slot for key %s is %d', $key, $hashSlot));
+
+        return $this->getNodesByHashSlot($hashSlot, $findHashSlotStrategyEnum);
+    }
+
+    /**
+     * @param int $hashSlot
+     * @param FindHashSlotStrategyEnum $findHashSlotStrategyEnum
+     *
+     * @return Node[]
+     */
+    private function getNodesByHashSlot(int $hashSlot, FindHashSlotStrategyEnum $findHashSlotStrategyEnum): array
+    {
         $availableNodes = [];
 
         switch ($findHashSlotStrategyEnum) {
@@ -187,5 +206,21 @@ final class RedisCluster implements RedisClusterInterface
         }
 
         return $availableNodes;
+    }
+
+    /**
+     * @return Logger|null
+     */
+    public function getLogger(): ?Logger
+    {
+        return $this->logger;
+    }
+
+    /**
+     * @param Logger|null $logger
+     */
+    public function setLogger(?Logger $logger): void
+    {
+        $this->logger = $logger;
     }
 }
