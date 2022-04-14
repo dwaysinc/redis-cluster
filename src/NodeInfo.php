@@ -30,9 +30,9 @@ class NodeInfo
     /**
      * If the node is a replica, and the master is known, the master node ID, otherwise the "-" character.
      *
-     * @var string
+     * @var string|null
      */
-    private string $master;
+    private ?string $master = null;
 
     /**
      * Milliseconds unix time at which the currently active ping was sent, or zero if there are no pending pings.
@@ -86,7 +86,10 @@ class NodeInfo
         $flags = explode(',', $clusterNodeInfo[2]);
         $clusterNode->setFlags(array_combine($flags, $flags));
 
-        $clusterNode->setMaster($clusterNodeInfo[3]);
+        if ($clusterNodeInfo[3] !== '-') {
+            $clusterNode->setMaster($clusterNodeInfo[3]);
+        }
+
         $clusterNode->setPingSent($clusterNodeInfo[4]);
         $clusterNode->setPongRecv($clusterNodeInfo[5]);
         $clusterNode->setConfigEpoch($clusterNodeInfo[6]);
@@ -154,7 +157,7 @@ class NodeInfo
     /**
      * @return string
      */
-    public function getMaster(): string
+    public function getMaster(): ?string
     {
         return $this->master;
     }

@@ -7,6 +7,11 @@ use Amp\Promise;
 use Amp\Redis\Redis;
 use RuntimeException;
 
+/**
+ * @see Redis
+ * @method set($key, $value, $options)
+ * @method get($key)
+ */
 final class Node
 {
     private Redis $redis;
@@ -14,6 +19,7 @@ final class Node
 
     /** @var Node[] */
     private array $slaveNodes = [];
+    private ?Node $masterNode = null;
 
     public function __construct(Redis $redis)
     {
@@ -64,5 +70,34 @@ final class Node
     public function setSlaveNodes(array $slaveNodes): void
     {
         $this->slaveNodes = $slaveNodes;
+    }
+
+    /**
+     * @return Node|null
+     */
+    public function getMasterNode(): ?Node
+    {
+        return $this->masterNode;
+    }
+
+    /**
+     * @param Node|null $masterNode
+     */
+    public function setMasterNode(?Node $masterNode): void
+    {
+        $this->masterNode = $masterNode;
+    }
+
+    public function isValidHashSlot(int $hashSlot): bool
+    {
+        foreach ($this->getNodeInfo()->getSlot() as $slot) {
+            $slot = explode('-', $slot);
+
+            if ($slot[0] <= $hashSlot && $slot[1] >= $hashSlot) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
