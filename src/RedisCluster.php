@@ -34,58 +34,12 @@ final class RedisCluster implements RedisClusterInterface
 
     public function set(string $key, string $value, SetOptions $options = null, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
     {
-        return call(function () use ($key, $findHashSlotStrategyEnum, $value, $options) {
-            yield $this->connect();
-
-            // todo: refactor
-            $nodes = $this->getNodesByKey($key, $findHashSlotStrategyEnum);
-
-            if (empty($nodes)) {
-                throw new RuntimeException('Nodes not found');
-            }
-
-            $this->getLogger()?->debug(sprintf('Found nodes to execute: %s', print_r(array_keys($nodes), true)));
-
-            foreach ($nodes as $id => $node) {
-                try {
-                    $this->getLogger()?->debug(sprintf('Trying to execute set on node %s', $id));
-
-                    return yield $node->set($key, $value, $options);
-                } catch (Throwable $e) {
-                    $this->getLogger()?->error($e->getMessage() . PHP_EOL . $e->getTraceAsString());
-                }
-            }
-
-            throw new RuntimeException('Cannot execute set command');
-        });
+        return $this->executeByKey($key, 'set', [$value, $options], $findHashSlotStrategyEnum);
     }
 
     public function get(string $key, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
     {
-        return call(function () use ($key, $findHashSlotStrategyEnum) {
-            yield $this->connect();
-
-            // todo: refactor
-            $nodes = $this->getNodesByKey($key, $findHashSlotStrategyEnum);
-
-            if (empty($nodes)) {
-                throw new RuntimeException('Nodes not found');
-            }
-
-            $this->getLogger()?->debug(sprintf('Found nodes to execute: %s', print_r(array_keys($nodes), true)));
-
-            foreach ($nodes as $id => $node) {
-                try {
-                    $this->getLogger()?->debug(sprintf('Trying to execute set on node %s', $id));
-
-                    return yield $node->get($key);
-                } catch (Throwable $e) {
-                    $this->getLogger()?->error($e->getMessage() . PHP_EOL . $e->getTraceAsString());
-                }
-            }
-
-            throw new RuntimeException('Cannot execute set command');
-        });
+        return $this->executeByKey($key, 'get', [], $findHashSlotStrategyEnum);
     }
 
     public function clusterNodes(): Promise
@@ -143,12 +97,6 @@ final class RedisCluster implements RedisClusterInterface
         $this->activeSlaveNodes = $slaveNodes;
     }
 
-    /**
-     * @param string $key
-     * @param FindHashSlotStrategyEnum $findHashSlotStrategyEnum
-     *
-     * @return Node[]
-     */
     private function getNodesByKey(string $key, FindHashSlotStrategyEnum $findHashSlotStrategyEnum): array
     {
         $hashSlot = Crc16::calculate($key) % 16384;
@@ -158,12 +106,6 @@ final class RedisCluster implements RedisClusterInterface
         return $this->getNodesByHashSlot($hashSlot, $findHashSlotStrategyEnum);
     }
 
-    /**
-     * @param int $hashSlot
-     * @param FindHashSlotStrategyEnum $findHashSlotStrategyEnum
-     *
-     * @return Node[]
-     */
     private function getNodesByHashSlot(int $hashSlot, FindHashSlotStrategyEnum $findHashSlotStrategyEnum): array
     {
         $availableNodes = [];
@@ -234,6 +176,33 @@ final class RedisCluster implements RedisClusterInterface
         }
 
         return $availableNodes;
+    }
+
+    public function executeByKey(string $key, string $command, array $arguments = [], FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return call(function () use ($key, $command, $arguments, $findHashSlotStrategyEnum) {
+            yield $this->connect();
+
+            $nodes = $this->getNodesByKey($key, $findHashSlotStrategyEnum);
+
+            if (empty($nodes)) {
+                throw new RuntimeException('Nodes not found');
+            }
+
+            $this->getLogger()?->debug(sprintf('Found nodes to execute: %s', implode(', ', array_keys($nodes))));
+
+            foreach ($nodes as $id => $node) {
+                try {
+                    $this->getLogger()?->debug(sprintf('Execute command "%s" on node "%s"', $command, $id));
+
+                    return yield $node->$command($key, ...$arguments);
+                } catch (Throwable $e) {
+                    $this->getLogger()?->error($e->getMessage() . PHP_EOL . $e->getTraceAsString());
+                }
+            }
+
+            throw new RuntimeException(sprintf('Cannot execute "%s" command', $command));
+        });
     }
 
     /**
