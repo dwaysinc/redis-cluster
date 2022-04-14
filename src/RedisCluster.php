@@ -2,6 +2,7 @@
 
 namespace DwaysInc\RedisCluster;
 
+use Amp\Loop;
 use Amp\Promise;
 use Amp\Redis\Redis;
 use Amp\Redis\SetOptions;
@@ -21,6 +22,7 @@ final class RedisCluster implements RedisClusterInterface
 
     private Promise $connect;
     private ?Logger $logger = null;
+    private int $reloadClusterNodesInterval = 5000;
 
     /**
      * @param Redis ...$redisList
@@ -66,8 +68,20 @@ final class RedisCluster implements RedisClusterInterface
         }
 
         return $this->connect = call(function () {
+            yield $this->reloadClusterNodes();
+        });
+    }
+
+    private function reloadClusterNodes(): Promise
+    {
+        return call(function () {
             yield $this->clusterNodes();
+
             $this->initNodes();
+
+            Loop::delay($this->getReloadClusterNodesInterval(), function () {
+                yield $this->reloadClusterNodes();
+            });
         });
     }
 
@@ -219,5 +233,21 @@ final class RedisCluster implements RedisClusterInterface
     public function setLogger(?Logger $logger): void
     {
         $this->logger = $logger;
+    }
+
+    /**
+     * @return int
+     */
+    public function getReloadClusterNodesInterval(): int
+    {
+        return $this->reloadClusterNodesInterval;
+    }
+
+    /**
+     * @param int $reloadClusterNodesInterval
+     */
+    public function setReloadClusterNodesInterval(int $reloadClusterNodesInterval): void
+    {
+        $this->reloadClusterNodesInterval = $reloadClusterNodesInterval;
     }
 }
