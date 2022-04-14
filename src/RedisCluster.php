@@ -2,7 +2,6 @@
 
 namespace DwaysInc\RedisCluster;
 
-use Amp\Loop;
 use Amp\Promise;
 use Amp\Redis\Redis;
 use Amp\Redis\SetOptions;
@@ -13,25 +12,23 @@ use function Amp\call;
 
 final class RedisCluster implements RedisClusterInterface
 {
-    /** @var Node[] */
-    private array $nodes;
-    /** @var Node[] */
-    private array $activeMasterNodes;
-    /** @var Node[] */
-    private array $activeSlaveNodes;
-
     private Promise $connect;
     private ?Logger $logger = null;
-    private int $reloadClusterNodesInterval = 5000;
+    private ClusterNodesWatcher $clusterNodesWatcher;
 
     /**
      * @param Redis ...$redisList
      */
     public function __construct(Redis ...$redisList)
     {
+        $nodes = [];
+
         foreach ($redisList as $redis) {
-            $this->nodes[] = new Node($redis);
+            $nodes[] = new Node($redis);
         }
+
+        $this->clusterNodesWatcher = new ClusterNodesWatcher();
+        $this->clusterNodesWatcher->setNodes($nodes);
     }
 
     public function set(string $key, string $value, SetOptions $options = null, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
@@ -44,23 +41,6 @@ final class RedisCluster implements RedisClusterInterface
         return $this->executeByKey($key, 'get', [], $findHashSlotStrategyEnum);
     }
 
-    public function clusterNodes(): Promise
-    {
-        return call(function () {
-            foreach ($this->nodes as $node) {
-                $clusterNodes = ClusterNodesParser::parse(yield $node->clusterNodes());
-
-                foreach ($clusterNodes as $clusterNode) {
-                    if ($clusterNode->getIsSelf()) {
-                        $node->setNodeInfo($clusterNode);
-
-                        break;
-                    }
-                }
-            }
-        });
-    }
-
     private function connect(): Promise
     {
         if (isset($this->connect)) {
@@ -68,47 +48,8 @@ final class RedisCluster implements RedisClusterInterface
         }
 
         return $this->connect = call(function () {
-            yield $this->reloadClusterNodes();
+            yield $this->clusterNodesWatcher->reloadClusterNodes();
         });
-    }
-
-    private function reloadClusterNodes(): Promise
-    {
-        return call(function () {
-            yield $this->clusterNodes();
-
-            $this->initNodes();
-
-            Loop::delay($this->getReloadClusterNodesInterval(), function () {
-                yield $this->reloadClusterNodes();
-            });
-        });
-    }
-
-    private function initNodes()
-    {
-        $masterNodes = [];
-        $slaveNodes = [];
-
-        foreach ($this->nodes as $node) {
-            if ($node->getNodeInfo()->getIsMaster()) {
-                $masterNodes[$node->getNodeInfo()->getId()] = $node;
-            } elseif ($node->getNodeInfo()->getIsSlave()) {
-                $slaveNodes[$node->getNodeInfo()->getId()] = $node;
-            }
-        }
-
-        foreach ($slaveNodes as $slaveNode) {
-            if (isset($masterNodes[$slaveNode->getNodeInfo()->getMaster()])) {
-                $masterNode = $masterNodes[$slaveNode->getNodeInfo()->getMaster()];
-                $currentSlaves = $masterNode->getSlaveNodes();
-                $masterNode->setSlaveNodes(array_merge($currentSlaves, [$slaveNode->getNodeInfo()->getId() => $slaveNode]));
-                $slaveNode->setMasterNode($masterNode);
-            }
-        }
-
-        $this->activeMasterNodes = $masterNodes;
-        $this->activeSlaveNodes = $slaveNodes;
     }
 
     private function getNodesByKey(string $key, FindHashSlotStrategyEnum $findHashSlotStrategyEnum): array
@@ -126,7 +67,7 @@ final class RedisCluster implements RedisClusterInterface
 
         switch ($findHashSlotStrategyEnum) {
             case FindHashSlotStrategyEnum::MASTER_ONLY:
-                foreach ($this->activeMasterNodes as $id => $node) {
+                foreach ($this->clusterNodesWatcher->getActiveMasterNodes() as $id => $node) {
                     if ($node->isValidHashSlot($hashSlot)) {
                         $availableNodes[$id] = $node;
 
@@ -136,7 +77,7 @@ final class RedisCluster implements RedisClusterInterface
 
                 break;
             case FindHashSlotStrategyEnum::SLAVE_ONLY:
-                foreach ($this->activeMasterNodes as $node) {
+                foreach ($this->clusterNodesWatcher->getActiveMasterNodes() as $node) {
                     if ($node->isValidHashSlot($hashSlot) && !empty($node->getSlaveNodes())) {
                         $availableNodes = array_merge($availableNodes, $node->getSlaveNodes());
 
@@ -144,7 +85,7 @@ final class RedisCluster implements RedisClusterInterface
                     }
                 }
 
-                foreach ($this->activeSlaveNodes as $node) {
+                foreach ($this->clusterNodesWatcher->getActiveSlaveNodes() as $node) {
                     if ($node->isValidHashSlot($hashSlot)) {
                         $availableNodes = array_merge($availableNodes, [$node]);
                     }
@@ -152,7 +93,7 @@ final class RedisCluster implements RedisClusterInterface
 
                 break;
             case FindHashSlotStrategyEnum::MASTER_FIRST:
-                foreach ($this->activeMasterNodes as $id => $node) {
+                foreach ($this->clusterNodesWatcher->getActiveMasterNodes() as $id => $node) {
                     if ($node->isValidHashSlot($hashSlot)) {
                         $availableNodes[$id] = $node;
                         $availableNodes = array_merge($availableNodes, $node->getSlaveNodes());
@@ -161,7 +102,7 @@ final class RedisCluster implements RedisClusterInterface
                     }
                 }
 
-                foreach ($this->activeSlaveNodes as $id => $node) {
+                foreach ($this->clusterNodesWatcher->getActiveSlaveNodes() as $id => $node) {
                     if ($node->isValidHashSlot($hashSlot)) {
                         $availableNodes[$id] = $node;
                     }
@@ -169,13 +110,13 @@ final class RedisCluster implements RedisClusterInterface
 
                 break;
             case FindHashSlotStrategyEnum::SLAVE_FIRST:
-                foreach ($this->activeSlaveNodes as $id => $node) {
+                foreach ($this->clusterNodesWatcher->getActiveSlaveNodes() as $id => $node) {
                     if ($node->isValidHashSlot($hashSlot)) {
                         $availableNodes[$id] = $node;
                     }
                 }
 
-                foreach ($this->activeMasterNodes as $id => $node) {
+                foreach ($this->clusterNodesWatcher->getActiveMasterNodes() as $id => $node) {
                     if ($node->isValidHashSlot($hashSlot)) {
                         $availableNodes = array_merge($availableNodes, $node->getSlaveNodes());
                         $availableNodes[$id] = $node;
@@ -199,6 +140,19 @@ final class RedisCluster implements RedisClusterInterface
 
             $nodes = $this->getNodesByKey($key, $findHashSlotStrategyEnum);
 
+            try {
+                return yield $this->executeOnNodes($nodes, $key, $command, $arguments);
+            } catch (Throwable $e) {
+                $this->getLogger()?->error($e->getMessage() . PHP_EOL . $e->getTraceAsString());
+            }
+
+            throw new RuntimeException(sprintf('Cannot execute "%s" command', $command));
+        });
+    }
+
+    public function executeOnNodes(array $nodes, string $key, string $command, array $arguments): Promise
+    {
+        return call(function () use ($nodes, $command, $key, $arguments) {
             if (empty($nodes)) {
                 throw new RuntimeException('Nodes not found');
             }
@@ -215,7 +169,7 @@ final class RedisCluster implements RedisClusterInterface
                 }
             }
 
-            throw new RuntimeException(sprintf('Cannot execute "%s" command', $command));
+            throw new RuntimeException(sprintf('Cannot execute "%s" command on nodes %s', $command, implode(', ', array_keys($nodes))));
         });
     }
 
@@ -240,7 +194,7 @@ final class RedisCluster implements RedisClusterInterface
      */
     public function getReloadClusterNodesInterval(): int
     {
-        return $this->reloadClusterNodesInterval;
+        return $this->clusterNodesWatcher->getReloadClusterNodesInterval();
     }
 
     /**
@@ -248,6 +202,11 @@ final class RedisCluster implements RedisClusterInterface
      */
     public function setReloadClusterNodesInterval(int $reloadClusterNodesInterval): void
     {
-        $this->reloadClusterNodesInterval = $reloadClusterNodesInterval;
+        $this->clusterNodesWatcher->setReloadClusterNodesInterval($reloadClusterNodesInterval);
+    }
+
+    public function __destruct()
+    {
+        $this->clusterNodesWatcher->stop();
     }
 }
