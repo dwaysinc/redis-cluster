@@ -166,11 +166,32 @@ final class RedisCluster implements RedisClusterInterface
                     return yield $node->$command($key, ...$arguments);
                 } catch (Throwable $e) {
                     $this->getLogger()?->error($e->getMessage() . PHP_EOL . $e->getTraceAsString());
+
+                    $message = explode(' ', $e->getMessage());
+
+                    if ($message[0] === 'MOVED') {
+                        $this->getLogger()?->warning($e->getMessage() . ' : ' . $key . ' : ' . $command);
+
+                        $node = $this->getNodeByAddress($message[2]);
+
+                        return yield $this->executeOnNodes([$node], $key, $command, $arguments);
+                    }
                 }
             }
 
             throw new RuntimeException(sprintf('Cannot execute "%s" command on nodes %s', $command, implode(', ', array_keys($nodes))));
         });
+    }
+
+    private function getNodeByAddress(string $address): Node
+    {
+        foreach ($this->clusterNodesWatcher->getNodes() as $node) {
+            if ($node->getNodeInfo()->getAddress() === $address) {
+                return $node;
+            }
+        }
+
+        throw new RuntimeException(sprintf('Node by address %s not found', $address));
     }
 
     /**
