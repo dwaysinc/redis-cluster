@@ -17,8 +17,6 @@ composer require dwaysinc/redis-cluster
 ```php
 <?php
 
-require_once __DIR__ . '/../vendor/autoload.php';
-
 use Amp\Log\ConsoleFormatter;
 use Amp\Log\StreamHandler;
 use Amp\Redis\Config;
