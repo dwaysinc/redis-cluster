@@ -20,6 +20,11 @@ class NodeInfo
     private string $address;
 
     /**
+     * @var string part of address
+     */
+    private string $cport;
+
+    /**
      * A list of flags: myself, master, slave, fail?, fail, handshake, noaddr, nofailover, noflags.
      * Flags are explained in detail in the next section.
      *
@@ -81,7 +86,11 @@ class NodeInfo
 
         $clusterNode = new NodeInfo();
         $clusterNode->setId($clusterNodeInfo[0]);
-        $clusterNode->setAddress($clusterNodeInfo[1]);
+
+        $address = explode('@', $clusterNodeInfo[1]);
+
+        $clusterNode->setAddress($address[0]);
+        $clusterNode->setCport($address[1]);
 
         $flags = explode(',', $clusterNodeInfo[2]);
         $clusterNode->setFlags(array_combine($flags, $flags));
@@ -281,5 +290,21 @@ class NodeInfo
         }
 
         return false;
+    }
+
+    /**
+     * @return string
+     */
+    public function getCport(): string
+    {
+        return $this->cport;
+    }
+
+    /**
+     * @param string $cport
+     */
+    public function setCport(string $cport): void
+    {
+        $this->cport = $cport;
     }
 }

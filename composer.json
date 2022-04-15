@@ -1,5 +1,6 @@
 {
   "name": "dwaysinc/redis-cluster",
+  "version": "0.0.2",
   "keywords": [
     "amp",
     "amphp",
