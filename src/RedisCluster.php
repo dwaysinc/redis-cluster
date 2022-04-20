@@ -2,8 +2,10 @@
 
 namespace DwaysInc\RedisCluster;
 
+use Amp\Failure;
 use Amp\Promise;
 use Amp\Redis\Redis;
+use Amp\Redis\RedisList;
 use Amp\Redis\SetOptions;
 use Monolog\Logger;
 use RuntimeException;
@@ -31,14 +33,102 @@ final class RedisCluster implements RedisClusterInterface
         $this->clusterNodesWatcher->setNodes($nodes);
     }
 
+    public function getList(string $key): RedisList
+    {
+        throw new RuntimeException(sprintf('Method %s not supported!', 'getList'));
+    }
+
+    public function lindex(string $key, int $index, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return $this->executeByKey($key, 'query', $findHashSlotStrategyEnum, ['lindex', $key, $index]);
+    }
+
+    public function linsert(string $key, ListInsertPositionEnum $listInsertPositionEnum, $pivot, $value, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return $this->executeByKey($key, 'query', $findHashSlotStrategyEnum, ['linsert', $key, $listInsertPositionEnum->name, $pivot, $value]);
+    }
+
+    public function llen(string $key, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return $this->executeByKey($key, 'query', $findHashSlotStrategyEnum, ['llen', $key]);
+    }
+
+    public function lpush(string $key, array $values, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return $this->executeByKey($key, 'query', $findHashSlotStrategyEnum, ['lpush', $key, ...$values]);
+    }
+
+    public function lpushx(string $key, array $values, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return $this->executeByKey($key, 'query', $findHashSlotStrategyEnum, ['lpushx', $key, ...$values]);
+    }
+
+    public function rpush(string $key, array $values, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return $this->executeByKey($key, 'query', $findHashSlotStrategyEnum, ['rpush', $key, ...$values]);
+    }
+
+    public function rpushx(string $key, array $values, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return $this->executeByKey($key, 'query', $findHashSlotStrategyEnum, ['rpushx', $key, ...$values]);
+    }
+
+    public function lpop(string $key, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return $this->executeByKey($key, 'query', $findHashSlotStrategyEnum, ['lpop', $key]);
+    }
+
+    public function rpop(string $key, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return $this->executeByKey($key, 'query', $findHashSlotStrategyEnum, ['rpop', $key]);
+    }
+
+    public function blpop(string $key, int $timeout = 0, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return call(function () use ($key, $timeout, $findHashSlotStrategyEnum) {
+            $response = yield $this->executeByKey($key, 'query', $findHashSlotStrategyEnum, ['blpop', $key, $timeout]);
+
+            return $response[1] ?? null;
+        });
+    }
+
+    public function brpop(string $key, int $timeout = 0, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return call(function () use ($key, $timeout, $findHashSlotStrategyEnum) {
+            $response = yield $this->executeByKey($key, 'query', $findHashSlotStrategyEnum, ['brpop', $key, $timeout]);
+
+            return $response[1] ?? null;
+        });
+    }
+
+    public function lrange($key, int $start = 0, int $end = -1, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return $this->executeByKey($key, 'query', $findHashSlotStrategyEnum, ['lrange', $key, $start, $end]);
+    }
+
+    public function lrem(string $key, string $value, int $count = 0, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return $this->executeByKey($key, 'query', $findHashSlotStrategyEnum, ['lrem', $key, $count, $value]);
+    }
+
+    public function lset(string $key, int $index, string $value, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return $this->executeByKey($key, 'query', $findHashSlotStrategyEnum, ['lset', $key, $index, $value]);
+    }
+
+    public function ltrim(string $key, int $start = 0, int $stop = -1, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    {
+        return $this->executeByKey($key, 'query', $findHashSlotStrategyEnum, ['ltrim', $key, $start, $stop]);
+    }
+
     public function set(string $key, string $value, SetOptions $options = null, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
     {
-        return $this->executeByKey($key, 'set', [$value, $options], $findHashSlotStrategyEnum);
+        return $this->executeByKey($key, 'set', $findHashSlotStrategyEnum, [$key, $value, $options]);
     }
 
     public function get(string $key, FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
     {
-        return $this->executeByKey($key, 'get', [], $findHashSlotStrategyEnum);
+        return $this->executeByKey($key, 'get', $findHashSlotStrategyEnum, [$key, $key]);
     }
 
     private function connect(): Promise
@@ -52,6 +142,12 @@ final class RedisCluster implements RedisClusterInterface
         });
     }
 
+    /**
+     * @param string $key
+     * @param FindHashSlotStrategyEnum $findHashSlotStrategyEnum
+     *
+     * @return Node[]
+     */
     private function getNodesByKey(string $key, FindHashSlotStrategyEnum $findHashSlotStrategyEnum): array
     {
         $hashSlot = Crc16::calculate($key) % 16384;
@@ -133,7 +229,7 @@ final class RedisCluster implements RedisClusterInterface
         return $availableNodes;
     }
 
-    public function executeByKey(string $key, string $command, array $arguments = [], FindHashSlotStrategyEnum $findHashSlotStrategyEnum = FindHashSlotStrategyEnum::MASTER_FIRST): Promise
+    public function executeByKey(string $key, string $command, FindHashSlotStrategyEnum $findHashSlotStrategyEnum, array $arguments = []): Promise
     {
         return call(function () use ($key, $command, $arguments, $findHashSlotStrategyEnum) {
             yield $this->connect();
@@ -150,6 +246,14 @@ final class RedisCluster implements RedisClusterInterface
         });
     }
 
+    /**
+     * @param Node[] $nodes
+     * @param string $key
+     * @param string $command
+     * @param array $arguments
+     *
+     * @return Promise
+     */
     public function executeOnNodes(array $nodes, string $key, string $command, array $arguments): Promise
     {
         return call(function () use ($nodes, $command, $key, $arguments) {
@@ -163,7 +267,7 @@ final class RedisCluster implements RedisClusterInterface
                 try {
                     $this->getLogger()?->debug(sprintf('Execute command "%s" on node "%s"', $command, $id));
 
-                    return yield $node->$command($key, ...$arguments);
+                    return yield $node->getRedis()->$command(...$arguments);
                 } catch (Throwable $e) {
                     $this->getLogger()?->error($e->getMessage() . PHP_EOL . $e->getTraceAsString());
 

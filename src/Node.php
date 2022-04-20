@@ -2,15 +2,11 @@
 
 namespace DwaysInc\RedisCluster;
 
-use Amp\Failure;
 use Amp\Promise;
 use Amp\Redis\Redis;
-use RuntimeException;
 
 /**
  * @see Redis
- * @method set($key, $value, $options)
- * @method get($key)
  */
 final class Node
 {
@@ -26,13 +22,12 @@ final class Node
         $this->redis = $redis;
     }
 
-    public function __call(string $name, array $arguments)
+    /**
+     * @return Redis
+     */
+    public function getRedis(): Redis
     {
-        if (method_exists($this->redis, $name)) {
-            return $this->redis->$name(...$arguments);
-        }
-
-        return new Failure(new RuntimeException(sprintf('Unknown method called: %s', $name)));
+        return $this->redis;
     }
 
     public function clusterNodes(): Promise

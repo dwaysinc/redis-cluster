@@ -15,4 +15,6 @@ interface RedisInterface
      * @return Promise
      */
     public function set(string $key, string $value, SetOptions $options = null): Promise;
+
+    public function get(string $key): Promise;
 }
